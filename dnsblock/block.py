@@ -1,0 +1,111 @@
+# -*- coding: utf-8 -*-
+import os
+import datetime
+import requests
+import concurrent.futures
+from dataclasses import dataclass
+from typing import Optional
+from dnsblock.config import BlockConfig as config
+
+@dataclass
+class url_repsonse:
+    url: str 
+    success: bool
+    text: Optional[str] = None
+
+def get_source_path():
+    default_path = config.default_blocklist_path
+    final_path = os.environ.get('DNSBLOCK_SOURCE_PATH', default_path)
+    return final_path
+
+def build_source_list(source_path=None):
+    if source_path is not None:
+        source_path = source_path
+    else:
+        source_path = get_source_path()
+    with open(source_path) as f:
+        source_path = f.read().splitlines()
+    source_list = [u for u in source_path if not u.startswith('#')]
+    return source_list
+
+def fetch_url_data(session, url, timeout):
+    try:
+        with session.get(url, timeout=timeout) as response:
+            return url_repsonse(url, True, response.text)
+    except requests.exceptions.RequestException as e:
+        return url_repsonse(url, False, '')
+
+def get_blocklist_data(timeout=10):
+    session = requests.Session()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for url in build_source_list():
+            if not url.startswith('#'):
+                futures.append(executor.submit(fetch_url_data, session, url, timeout))
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+        bad_urls = [result.url for result in results if not result.success]
+        good_urls = [result.url for result in results if result.success]
+    return results, bad_urls, good_urls
+
+def unpack_result():
+    blocklist_data = get_blocklist_data()
+    results = (blocklist_data[0])
+    result = [obj.text for obj in results]
+    for r in result:
+        result_all = r.splitlines()
+    return result_all
+
+def format_blocklist_unbound():
+    unbound_blocklist = []
+    for line in unpack_result():
+        if not line.startswith('#'):
+            domain_name = line.split(' ')[-1]
+            formatted_blocklist_url = 'local-zone: "' + domain_name + '" redirect'
+            unbound_blocklist.append(formatted_blocklist_url)
+    return unbound_blocklist
+
+def format_blocklist_dnsmaq():
+    #address=/example.com/
+    unbound_blocklist = []
+    for line in unpack_result():
+        if not line.startswith('#'):
+            domain_name = line.split(' ')[-1]
+            formatted_blocklist_url = 'address=/' + domain_name + '/'
+            unbound_blocklist.append(formatted_blocklist_url)
+    return unbound_blocklist
+
+def build_conf_file(dns_app=None, conf_path=None):
+    if dns_app is None or conf_path is None:
+        print('Either the dns_app or conf_path argument is empty. Please specify both arguments.')
+    else:
+        dns_app_lower = dns_app.lower()
+        dns_app_dict = config.dns_app_dict
+        if dns_app_lower in dns_app_dict:
+            dateandtime = datetime.datetime.now()
+            date_string = dateandtime.strftime(config.generated_datetime_format)
+            if dns_app_lower == 'dnsmasq':
+                app_name = dns_app_dict["dnsmasq"]
+                lead_string = ''
+                blocklist = format_blocklist_dnsmaq()
+            elif dns_app_lower == 'unbound':
+                app_name = dns_app_dict["unbound"]
+                lead_string = config.unbound_conf_lead_string
+                blocklist = format_blocklist_unbound()
+    with open(conf_path, 'w') as filehandle:
+        generatedby_comment = config.generated_comment_lead + app_name + date_string
+        filehandle.writelines(generatedby_comment)
+        filehandle.write(config.repo_url)
+        filehandle.writelines(lead_string)
+        for url in blocklist:
+            block_url = url + '\n'
+            filehandle.writelines(block_url)
+
+def stats():
+    results, bad_urls, good_urls = get_blocklist_data()
+    #print(good_urls)
+    print(bad_urls)
+
+#print(format_blocklist_unbound())
+#print(format_blocklist_dnsmaq())
+build_conf_file(dns_app='unbound',conf_path='/home/steven/projects/repos/python-dnsblock/blockfiles/dnsblock.conf')
+#stats()
