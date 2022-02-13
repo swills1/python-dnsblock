@@ -20,15 +20,17 @@ with open('requirements.txt') as handle:
 setup(
     name='dnsblock',
     version=const.__version__,
-    description='dns blocking automation tools',
+    description='dns blocklist automation and maintenance tools',
     author='Steven Wills',
     author_email='steven+dnsblock@swills.me',
     url='https://github.com/swills1/python-dnsblock.git',
     packages=['dnsblock'],
+    license='BSD 3-Clause',
     install_requires=requirements,
     python_requires='>=3.10',
     long_description=readme,
     keywords=['dns', 'blocklist'],
+    zip_safe=False,
     classifiers=[
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
