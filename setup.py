@@ -35,5 +35,13 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: BSD License',
-    ]
+    ],
+
+    entry_points={
+        'console_scripts': [
+            #command = package.module:function
+            'dnsblock = dnsblock.command:dnsblock',
+        ],
+    }
+
 )

@@ -6,27 +6,13 @@ import concurrent.futures
 from dataclasses import dataclass
 from typing import Optional
 from dnsblock.config import BlockConfig as config
+from dnsblock import utils as ut
 
 @dataclass
 class url_repsonse:
     url: str 
     success: bool
     text: Optional[str] = None
-
-def get_source_path():
-    default_path = config.default_blocklist_path
-    final_path = os.environ.get('DNSBLOCK_SOURCE_PATH', default_path)
-    return final_path
-
-def build_source_list(source_path=None):
-    if source_path is not None:
-        source_path = source_path
-    else:
-        source_path = get_source_path()
-    with open(source_path) as f:
-        source_path = f.read().splitlines()
-    source_list = [u for u in source_path if not u.startswith('#')]
-    return source_list
 
 def fetch_url_data(session, url, timeout):
     try:
@@ -39,7 +25,7 @@ def get_blocklist_data(timeout=10):
     session = requests.Session()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
-        for url in build_source_list():
+        for url in ut.build_source_list():
             if not url.startswith('#'):
                 futures.append(executor.submit(fetch_url_data, session, url, timeout))
         results = [future.result() for future in concurrent.futures.as_completed(futures)]
@@ -99,13 +85,3 @@ def build_conf_file(dns_app=None, conf_path=None):
         for url in blocklist:
             block_url = url + '\n'
             filehandle.writelines(block_url)
-
-def stats():
-    results, bad_urls, good_urls = get_blocklist_data()
-    #print(good_urls)
-    print(bad_urls)
-
-#print(format_blocklist_unbound())
-#print(format_blocklist_dnsmaq())
-build_conf_file(dns_app='unbound',conf_path='/home/steven/projects/repos/python-dnsblock/blockfiles/dnsblock.conf')
-#stats()

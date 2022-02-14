@@ -1,7 +1,18 @@
-# -*- coding=utf-8 -*-
+# -*- coding: utf-8 -*-
 import requests
+import os
+from dnsblock.config import BlockConfig as config
 
-def build_source_list(source_path):
+def get_source_path():
+    default_path = config.default_source_path
+    final_path = os.environ.get('DNSBLOCK_SOURCE_PATH', default_path)
+    return final_path
+
+def build_source_list(source_path=None):
+    if source_path is not None:
+        source_path = source_path
+    else:
+        source_path = get_source_path()
     with open(source_path) as f:
         source_path = f.read().splitlines()
     source_list = [u for u in source_path if not u.startswith('#')]
@@ -22,8 +33,9 @@ def fetch_single_blocklist_data(source_path, url):
         print('...')
     return  unbound_blocklist
 
-def count_entries(source):
-    source_list = build_source_list(source_path=source)
+def count_entries(source=None):
+    if source is None:
+        source_list = build_source_list(source_path=source)
     d = {}
     for s in source_list:
         response = requests.get(s)
@@ -35,4 +47,3 @@ def count_entries(source):
         else:
             print('...')
     return d
-
