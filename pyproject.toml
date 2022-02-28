@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "dnsblock"
+version = "0.1.0"
+description = "DNS blocking automation and maintenance tools"
+authors = ["Steven Wills <steven+dnsblock@swills.me>"]
+license = "MIT"
+readme = "README.rst"
+homepage = "https://github.com/python-dnsblock/poetry"
+documentation = "https://python-poetry.org/docs"
+keywords = ["blocklist", "dns"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "2.27.1"
+click = "8.0.4"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core @ git+https://github.com/python-poetry/poetry-core.git@master"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+dnsblock = 'dnsblock.command:dnsblock'

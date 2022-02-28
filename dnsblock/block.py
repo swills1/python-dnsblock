@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-import os
 import datetime
 import requests
 import concurrent.futures
 from dataclasses import dataclass
 from typing import Optional
-from dnsblock.config import BlockConfig as config
+from dnsblock import config
 from dnsblock import utils as ut
 
 @dataclass
@@ -15,6 +14,7 @@ class url_repsonse:
     text: Optional[str] = None
 
 def fetch_url_data(session, url, timeout):
+    """Fetch all data from blocklist urls and trap specific errors"""
     try:
         with session.get(url, timeout=timeout) as response:
             return url_repsonse(url, True, response.text)
@@ -22,6 +22,7 @@ def fetch_url_data(session, url, timeout):
         return url_repsonse(url, False, '')
 
 def get_blocklist_data(timeout=10):
+    """Use threading to process the source list and pull in fetched url data"""
     session = requests.Session()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
@@ -33,7 +34,8 @@ def get_blocklist_data(timeout=10):
         good_urls = [result.url for result in results if result.success]
     return results, bad_urls, good_urls
 
-def unpack_result():
+def unpack_dnsname():
+    """Isolate DNS names from blockist and build a list of only DNS names"""
     blocklist_data = get_blocklist_data()
     results = (blocklist_data[0])
     result = [obj.text for obj in results]
@@ -41,14 +43,27 @@ def unpack_result():
         result_all = r.splitlines()
     return result_all
 
-def format_blocklist_unbound():
-    unbound_blocklist = []
+def format_dnsname_list(app: str, prefix: str='', suffix: str=''):
+    app_lower = app.lower
+    formatted_blocklist = []
+    app_choices = config.DNS_APP_DICT.keys()
+    if app not in app_choices:
+        print('App choice is not valid')
+    elif app_lower == 'unbound':
+      prefix = 'local-zone: "'
+      suffix = '" redirect'
+    elif app_lower == 'dnsmasq':
+      prefix = 'address=/'
+      suffix = '/'
+    elif app_lower == 'custom':
+        prefix = prefix
+        suffix = suffix
     for line in unpack_result():
         if not line.startswith('#'):
             domain_name = line.split(' ')[-1]
-            formatted_blocklist_url = 'local-zone: "' + domain_name + '" redirect'
-            unbound_blocklist.append(formatted_blocklist_url)
-    return unbound_blocklist
+            formatted_blocklist_url = prefix, domain_name, suffix
+            formatted_blocklist.append(formatted_blocklist_url)
+    return formatted_blocklist
 
 def format_blocklist_dnsmaq():
     #address=/example.com/
@@ -60,27 +75,27 @@ def format_blocklist_dnsmaq():
             unbound_blocklist.append(formatted_blocklist_url)
     return unbound_blocklist
 
-def build_conf_file(dns_app=None, conf_path=None):
+def build_conf_file(app: str, conf_path: str,prefix: str='', suffix: str=''):
     if dns_app is None or conf_path is None:
         print('Either the dns_app or conf_path argument is empty. Please specify both arguments.')
     else:
         dns_app_lower = dns_app.lower()
-        dns_app_dict = config.dns_app_dict
-        if dns_app_lower in dns_app_dict:
+        DNS_APP_DICT = config.DNS_APP_DICT
+        if dns_app_lower in DNS_APP_DICT:
             dateandtime = datetime.datetime.now()
-            date_string = dateandtime.strftime(config.generated_datetime_format)
+            date_string = dateandtime.strftime(config.GENERATED_DATETIME_FORMAT)
             if dns_app_lower == 'dnsmasq':
-                app_name = dns_app_dict["dnsmasq"]
+                app_name = DNS_APP_DICT["dnsmasq"]
                 lead_string = ''
                 blocklist = format_blocklist_dnsmaq()
             elif dns_app_lower == 'unbound':
-                app_name = dns_app_dict["unbound"]
-                lead_string = config.unbound_conf_lead_string
+                app_name = DNS_APP_DICT["unbound"]
+                lead_string = config.LEADSTRING_DICT['unbound']
                 blocklist = format_blocklist_unbound()
     with open(conf_path, 'w') as filehandle:
-        generatedby_comment = config.generated_comment_lead + app_name + date_string
+        generatedby_comment = config.GENERATED_COMMENT_LEAD + app_name + date_string
         filehandle.writelines(generatedby_comment)
-        filehandle.write(config.repo_url)
+        filehandle.write(config.REPO_URL)
         filehandle.writelines(lead_string)
         for url in blocklist:
             block_url = url + '\n'
