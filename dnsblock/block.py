@@ -34,7 +34,7 @@ def get_blocklist_data(timeout=10):
         good_urls = [result.url for result in results if result.success]
     return results, bad_urls, good_urls
 
-def unpack_dnsname():
+def unpack_dnslist():
     """Isolate DNS names from blockist and build a list of only DNS names"""
     blocklist_data = get_blocklist_data()
     results = (blocklist_data[0])
@@ -43,60 +43,38 @@ def unpack_dnsname():
         result_all = r.splitlines()
     return result_all
 
-def format_dnsname_list(app: str, prefix: str='', suffix: str=''):
-    app_lower = app.lower
+def format_dnslist(app: str, prefix: str='', suffix: str=''):
+    """Format dns names in preparation for conf file"""
+    app_lower = app.lower()
     formatted_blocklist = []
-    app_choices = config.DNS_APP_DICT.keys()
-    if app not in app_choices:
-        print('App choice is not valid')
-    elif app_lower == 'unbound':
-      prefix = 'local-zone: "'
-      suffix = '" redirect'
-    elif app_lower == 'dnsmasq':
-      prefix = 'address=/'
-      suffix = '/'
+    known_app_dict = config.DNS_APP_DICT
+    if app in known_app_dict:
+        prefix, suffix = known_app_dict.get(app_lower)
     elif app_lower == 'custom':
         prefix = prefix
         suffix = suffix
-    for line in unpack_result():
+    else:
+        raise ValueError(f'"{app_lower}" is not a valid app choice') 
+    for line in unpack_dnslist():
         if not line.startswith('#'):
             domain_name = line.split(' ')[-1]
-            formatted_blocklist_url = prefix, domain_name, suffix
+            formatted_blocklist_url = prefix + domain_name + suffix
             formatted_blocklist.append(formatted_blocklist_url)
     return formatted_blocklist
 
-def format_blocklist_dnsmaq():
-    #address=/example.com/
-    unbound_blocklist = []
-    for line in unpack_result():
-        if not line.startswith('#'):
-            domain_name = line.split(' ')[-1]
-            formatted_blocklist_url = 'address=/' + domain_name + '/'
-            unbound_blocklist.append(formatted_blocklist_url)
-    return unbound_blocklist
-
-def build_conf_file(app: str, conf_path: str,prefix: str='', suffix: str=''):
-    if dns_app is None or conf_path is None:
-        print('Either the dns_app or conf_path argument is empty. Please specify both arguments.')
-    else:
-        dns_app_lower = dns_app.lower()
-        DNS_APP_DICT = config.DNS_APP_DICT
-        if dns_app_lower in DNS_APP_DICT:
-            dateandtime = datetime.datetime.now()
-            date_string = dateandtime.strftime(config.GENERATED_DATETIME_FORMAT)
-            if dns_app_lower == 'dnsmasq':
-                app_name = DNS_APP_DICT["dnsmasq"]
-                lead_string = ''
-                blocklist = format_blocklist_dnsmaq()
-            elif dns_app_lower == 'unbound':
-                app_name = DNS_APP_DICT["unbound"]
-                lead_string = config.LEADSTRING_DICT['unbound']
-                blocklist = format_blocklist_unbound()
+def build_conf_file(app: str, conf_path: str, leadstring: str='', prefix: str='', suffix: str=''):
+    formatted_blocklist = format_dnslist(app, prefix, suffix)
+    #dns_app = app
+    dateandtime = datetime.datetime.now()
+    date_string = dateandtime.strftime(config.GENERATED_DATETIME_FORMAT)
+    lead_dict = config.LEADSTRING_DICT
+    if app in lead_dict:
+        leadstring = lead_dict.get(app)
     with open(conf_path, 'w') as filehandle:
-        generatedby_comment = config.GENERATED_COMMENT_LEAD + app_name + date_string
+        generatedby_comment = config.GENERATED_COMMENT_LEAD + app + date_string
         filehandle.writelines(generatedby_comment)
         filehandle.write(config.REPO_URL)
-        filehandle.writelines(lead_string)
-        for url in blocklist:
+        filehandle.writelines(leadstring)
+        for url in formatted_blocklist:
             block_url = url + '\n'
             filehandle.writelines(block_url)
